@@ -6,16 +6,23 @@ import paramiko
 from netmiko import ConnectHandler
 
 
-# Compatibilidad SSH
-for k in (
+# =========================
+# COMPATIBILIDAD SSH (GNS3 / Paramiko Moderno)
+# =========================
+from paramiko.transport import Transport
+
+legacy_kex = [
+    "diffie-hellman-group1-sha1",
     "diffie-hellman-group14-sha1",
     "diffie-hellman-group-exchange-sha1"
-):
-    if k in paramiko.Transport._kex_info:
-        if k not in paramiko.Transport._preferred_kex:
-            paramiko.Transport._preferred_kex += (k,)
+]
 
-
+for k in legacy_kex:
+    if k not in Transport._kex_info and "diffie-hellman-group14-sha1" in Transport._kex_info:
+        Transport._kex_info[k] = Transport._kex_info["diffie-hellman-group14-sha1"]
+    if k in Transport._kex_info and k not in Transport._preferred_kex:
+        Transport._preferred_kex += (k,)
+        
 # GitHub
 BASE = (
     "https://raw.githubusercontent.com/"
@@ -151,7 +158,8 @@ try:
 
         salida = conexion.send_config_set(
             lineas,
-            cmd_verify=False
+            cmd_verify=False,
+            read_timeout=60  # Aumenta el tiempo de espera
         )
 
         print(salida)
