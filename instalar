@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+
+print("=== [1/3] INICIANDO INSTALACIÓN AUTOMÁTICA ===")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+VENV = os.path.join(BASE_DIR, "venv")
+PYTHON = os.path.join(VENV, "Scripts" if os.name == "nt" else "bin", "python")
+REQUIREMENTS = os.path.join(BASE_DIR, "requirements.txt")
+
+# Crear el entorno virtual si no existe
+if not os.path.exists(PYTHON):
+    print("=== [2/3] Creando el entorno virtual (venv)... ===")
+    subprocess.check_call([sys.executable, "-m", "venv", VENV])
+else:
+    print("=== [2/3] El entorno virtual ya estaba creado. ===")
+
+# Instalar el requirements.txt
+if os.path.exists(REQUIREMENTS):
+    print("=== [3/3] Instalando netmiko desde requirements.txt... ===")
+    subprocess.check_call([PYTHON, "-m", "pip", "install", "-r", REQUIREMENTS])
+    print("\n¡PROCESO TERMINADO CON ÉXITO! Todo listo.")
+else:
+    print("=== ERROR: No se encuentra el archivo requirements.txt ===")
