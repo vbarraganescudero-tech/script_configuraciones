@@ -68,7 +68,6 @@ tipo, archivo = ROUTERS[router]
 # =========================
 
 try:
-
     texto = urllib.request.urlopen(
         BASE + archivo
     ).read().decode()
@@ -76,7 +75,6 @@ try:
     print("[OK] Configuración descargada.")
 
 except Exception as e:
-
     print("[ERROR] GitHub:", e)
     exit()
 
@@ -86,7 +84,6 @@ except Exception as e:
 # =========================
 
 try:
-
     conexion = ConnectHandler(
         device_type=tipo,
         host=ip,
@@ -98,74 +95,63 @@ try:
 
 
     # ==================================================
-    # CISCO
+    # CISCO (Protegiendo GigabitEthernet0/9)
     # ==================================================
 
     if router == "cisco":
-
         lineas = []
-
         ignorar_banner = False
         ignorar_line = False
+        ignorar_eth9 = False
 
         for linea in texto.splitlines():
+            linea_str = linea.strip()
 
-            linea = linea.strip()
-
-            if not linea:
+            if not linea_str:
                 continue
 
-            # Ignorar banners
-            if linea.startswith("banner "):
+            # Detectar si el bloque de configuración pertenece a la interfaz 9 (gestión)
+            if linea_str.startswith("interface GigabitEthernet0/9") or linea_str.startswith("interface Gi0/9"):
+                ignorar_eth9 = True
+                continue
+            if ignorar_eth9:
+                if linea_str.startswith("!") or linea_str.startswith("interface "):
+                    ignorar_eth9 = False
+                else:
+                    continue
 
+            # Ignorar banners y líneas vty de acceso
+            if linea_str.startswith("banner "):
                 ignorar_banner = True
                 continue
-
             if ignorar_banner:
-
-                if linea.startswith("!"):
+                if linea_str.startswith("!"):
                     ignorar_banner = False
-
                 continue
 
-            # Ignorar líneas de consola, AUX y VTY
             if (
-                linea.startswith("line con") or
-                linea.startswith("line aux") or
-                linea.startswith("line vty")
+                linea_str.startswith("line con") or
+                linea_str.startswith("line aux") or
+                linea_str.startswith("line vty")
             ):
-
                 ignorar_line = True
                 continue
-
             if ignorar_line:
-
-                if linea.startswith("!"):
+                if linea_str.startswith("!"):
                     ignorar_line = False
-
                 continue
 
-            # No enviar estos comandos
-            if linea == "end":
+            if linea_str == "end" or linea_str.startswith("version ") or linea_str.startswith("!"):
                 continue
 
-            if linea.startswith("version "):
-                continue
-
-            if linea.startswith("!"):
-                continue
-
-            lineas.append(linea)
-
+            lineas.append(linea_str)
 
         salida = conexion.send_config_set(
             lineas,
             cmd_verify=False,
-            read_timeout=60  # Aumenta el tiempo de espera
+            read_timeout=60
         )
-
         print(salida)
-
 
         try:
             conexion.save_config()
@@ -174,30 +160,31 @@ try:
 
 
     # ==================================================
-    # MIKROTIK
+    # MIKROTIK (Protegiendo eth9)
     # ==================================================
 
     elif router == "mikrotik":
-
-        # Método que ya funciona
+        # Filtrar el archivo .rsc para quitar líneas que toquen la interfaz eth9
+        lineas_seguras = []
+        for linea in texto.splitlines():
+            if "eth9" in linea:
+                continue  # Omite cualquier comando que afecte a eth9
+            lineas_seguras.append(linea)
+        
+        texto_seguro = "\n".join(lineas_seguras)
 
         sftp = conexion.remote_conn_pre.open_sftp()
-
         sftp.putfo(
-            io.BytesIO(texto.encode()),
+            io.BytesIO(texto_seguro.encode()),
             "restaurar.rsc"
         )
-
         sftp.close()
-
 
         salida = conexion.send_command_timing(
             "/import file-name=restaurar.rsc",
             read_timeout=180
         )
-
         print(salida)
-
 
         conexion.send_command_timing(
             '/file remove [find name="restaurar.rsc"]'
@@ -205,31 +192,26 @@ try:
 
 
     # ==================================================
-    # VYOS
+    # VYOS (Protegiendo eth9)
     # ==================================================
 
     elif router == "vyos":
-
         conexion.send_command(
             ": > /tmp/config.boot",
             cmd_verify=False
         )
 
-
         for linea in texto.splitlines():
+            # Si la línea configura ethernet eth9, la omitimos para proteger la gestión
+            if "ethernet eth9" in linea:
+                continue
 
             if linea.strip():
-
-                linea = linea.replace(
-                    "'",
-                    "'\\''"
-                )
-
+                linea_escapada = linea.replace("'", "'\\''")
                 conexion.send_command(
-                    "echo '" + linea + "' >> /tmp/config.boot",
+                    f"echo '{linea_escapada}' >> /tmp/config.boot",
                     cmd_verify=False
                 )
-
 
         salida = conexion.send_config_set(
             [
@@ -238,43 +220,46 @@ try:
                 "save"
             ]
         )
-
         print(salida)
 
 
     # ==================================================
-    # FRR
+    # FRR / ALPINE (Protegiendo eth9)
     # ==================================================
 
     elif router == "frr":
+        lineas_filtradas = []
+        saltar_bloque_eth9 = False
+
+        for linea in texto.splitlines():
+            if "interface eth9" in linea:
+                saltar_bloque_eth9 = True
+                continue
+            if saltar_bloque_eth9 and linea.strip() == "!":
+                saltar_bloque_eth9 = False
+                continue
+            if not saltar_bloque_eth9:
+                lineas_filtradas.append(linea)
+
+        texto_seguro = "\n".join(lineas_filtradas)
 
         conexion.send_command(
             ": > /tmp/frr.conf",
             cmd_verify=False
         )
 
-
-        for linea in texto.splitlines():
-
+        for linea in texto_seguro.splitlines():
             if linea.strip():
-
-                linea = linea.replace(
-                    "'",
-                    "'\\''"
-                )
-
+                linea_escapada = linea.replace("'", "'\\''")
                 conexion.send_command(
-                    "echo '" + linea + "' >> /tmp/frr.conf",
+                    f"echo '{linea_escapada}' >> /tmp/frr.conf",
                     cmd_verify=False
                 )
-
 
         salida = conexion.send_command(
             "vtysh -f /tmp/frr.conf"
         )
-
         print(salida)
-
 
         conexion.send_command(
             "vtysh -c 'write memory'"
@@ -282,54 +267,41 @@ try:
 
 
     # ==================================================
-    # JUNOS
+    # JUNOS (Usando load merge en vez de override para proteger ge-0/0/9)
     # ==================================================
 
     elif router == "junos":
-
-        # Subir el fichero completo al JunOS
         sftp = conexion.remote_conn_pre.open_sftp()
-
         sftp.putfo(
             io.BytesIO(texto.encode()),
             "/var/tmp/restaurar.conf"
         )
-
         sftp.close()
 
-
-        # Entrar en configuración
         conexion.config_mode()
 
-
-        # Cargar el fichero completo
+        # Usamos 'load merge' para fusionar la config de GitHub sin borrar la eth9 actual
         salida = conexion.send_command_timing(
-            "load override /var/tmp/restaurar.conf",
+            "load merge /var/tmp/restaurar.conf",
             read_timeout=120
         )
-
         print(salida)
 
-
-        # Aplicar configuración
         salida = conexion.commit(
             read_timeout=120
         )
-
         print(salida)
 
 
     # =========================
     # CERRAR CONEXIÓN
     # =========================
-
     conexion.disconnect()
 
     print()
-    print("[OK] Proceso terminado.")
+    print("[OK] Proceso terminado con éxito (gestión y eth9 protegidas).")
 
 
 except Exception as e:
-
     print()
     print("[ERROR]", e)
