@@ -12,35 +12,35 @@ FECHA = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 ROUTERS = {
     "Albania": {
-        "ip": "192.168.122.2",
+        "ip": "10.1.0.1",
         "usuario": "admin",
         "password": "admin123",
         "tipo": "cisco"
     },
 
     "Andorra": {
-        "ip": "192.168.122.3",
+        "ip": "10.2.0.1",
         "usuario": "admin",
         "password": "Victortk123",
         "tipo": "mikrotik"
     },
 
     "Angola": {
-        "ip": "192.168.122.4",
+        "ip": "10.3.0.1",
         "usuario": "admin",
         "password": "admin123",
         "tipo": "cisco"
     },
 
     "Argentina": {
-        "ip": "192.168.122.5",
+        "ip": "10.4.0.1",
         "usuario": "vyos",
         "password": "vyos",
         "tipo": "vyos"
     },
 
     "Australia": {
-        "ip": "192.168.122.6",
+        "ip": "10.5.0.1",
         "usuario": "admin",
         "password": "Victortk123",
         "tipo": "junos"
